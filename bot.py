@@ -1,8 +1,8 @@
 import requests
 import json
 
-TOKEN = "YOUR_TOKEN"
-CHAT_ID = "YOUR_CHAT_ID"
+TOKEN = "8597164941:AAFooj7wISO14SoP7wTROfAt8kMhcICa6ns"
+CHAT_ID = "5444530262"
 
 DATA_FILE = "data.json"
 
