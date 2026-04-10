@@ -48,6 +48,7 @@ def check_jnt(code):
         return "Lỗi API J&T"
 
 # ================= TRA CỨU SPX (ANTI-DETECT BẬC CAO) =================
+# ================= TRA CỨU SPX (ANTI-DETECT + DOCKER PATH) =================
 def check_spx(code):
     code = code.strip().upper() 
     driver = None
@@ -58,15 +59,19 @@ def check_spx(code):
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--window-size=1920,1080")
         
-        # --- CÁC LỆNH TÀNG HÌNH CHỐNG CHẶN BỞI SHOPEE ---
+        # --- BÁO CHO CODE BIẾT CHROME NẰM Ở ĐÂU TRONG DOCKER ---
+        options.binary_location = "/usr/bin/chromium"
+        
+        # --- CÁC LỆNH TÀNG HÌNH ---
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
         
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        # --- DÙNG DRIVER CỦA DOCKER, BỎ QUA WEBDRIVER_MANAGER ---
+        driver = webdriver.Chrome(service=Service("/usr/bin/chromedriver"), options=options)
         
-        # Xóa cờ (flag) "webdriver" để Shopee tưởng đây là người thật
+        # Xóa cờ (flag) "webdriver"
         driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
             "source": """
                 Object.defineProperty(navigator, 'webdriver', {
@@ -80,7 +85,6 @@ def check_spx(code):
         print(f"--- ĐANG MỞ CHROME KIỂM TRA: {code} ---")
         driver.get("https://spx.vn/")
         
-        # Chờ 10s để Shopee nạp xong hệ thống chống bot (Cloudflare/Akamai)
         time.sleep(10) 
         
         js_script = f"""
@@ -105,12 +109,12 @@ def check_spx(code):
             return f"🔄 {msg}"
         return "Chưa có hành trình mới"
     except Exception as e:
-        print(f"Lỗi SPX ({code}): {e}")
+        # In lỗi chi tiết ra log của Railway để dễ bắt bệnh
+        print(f"Lỗi SPX ({code}): {str(e)}")
         return f"SPX đang chặn (Lỗi hệ thống)"
     finally:
         if driver:
             driver.quit()
-
 # ================= VÒNG LẶP CHÍNH =================
 def run():
     print("--- BOT BẮT ĐẦU HOẠT ĐỘNG ---")
