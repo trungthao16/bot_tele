@@ -1,5 +1,10 @@
 import requests
 import json
+# Import thêm các vũ khí hạng nặng (Selenium) đã có sẵn trong máy chủ của bạn
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 TOKEN = "8597164941:AAFooj7wISO14SoP7wTROfAt8kMhcICa6ns"
 CHAT_ID = "5444530262"
@@ -33,47 +38,40 @@ def check_jnt(code):
     except Exception as e:
         return "Lỗi API J&T"
 
-# ================= SPX =================
+# ================= SPX (DÙNG TRÌNH DUYỆT ẨN) =================
 def check_spx(code):
-    # Dọn dẹp mã vận đơn (xóa khoảng trắng thừa và viết hoa)
     code = code.strip().upper() 
-    
     try:
+        # Cấu hình mở Chrome ẩn không hiện giao diện
+        options = Options()
+        options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        
+        print(f"--- ĐANG MỞ CHROME KIỂM TRA: {code} ---")
+        
+        # Khởi động Chrome
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        
+        # Truy cập thẳng vào hệ thống API của Shopee bằng Chrome
         url = f"https://spx.vn/api/v2/fleet_order/tracking/search?sls_tracking_number={code}"
+        driver.get(url)
         
-        # Bổ sung bộ Header siêu giống trình duyệt thật để vượt mặt tường lửa
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": "https://spx.vn/",
-            "Origin": "https://spx.vn",
-            "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "Sec-Ch-Ua-Platform": '"Windows"',
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-origin"
-        }
+        # Rút ruột dữ liệu JSON trả về trên màn hình
+        content = driver.find_element("tag name", "body").text
+        driver.quit() # Tắt Chrome cho nhẹ máy
         
-        res = requests.get(url, headers=headers, timeout=15)
+        print(f"Response: {content[:300]}") # In ra log để dự phòng
         
-        # --- PHẦN DEBUG QUAN TRỌNG ĐỂ XEM LỖI ---
-        print(f"--- ĐANG KIỂM TRA MÃ: {code} ---")
-        print(f"Status Code: {res.status_code}")
-        print(f"Response Text: {res.text[:300]}") # In ra 300 ký tự trả về
-        # ----------------------------------------
-        
-        if res.status_code != 200:
-            return f"SPX lỗi ({res.status_code})"
-            
-        data = res.json()
+        data = json.loads(content)
         
         if data.get("retcode") == 0 and data.get("data") and data["data"].get("tracking_list"):
             latest_tracking = data["data"]["tracking_list"][0]
             message = latest_tracking.get("message", "")
             message_lower = message.lower()
 
+            # Dò đúng từ khóa
             if "giao hàng thành công" in message_lower or "đã được giao" in message_lower:
                 return "✅ Đã giao"
             elif "đang giao hàng" in message_lower or "đang được giao" in message_lower:
