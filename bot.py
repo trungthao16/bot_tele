@@ -33,37 +33,34 @@ def check_jnt(code):
 # ================= SPX =================
 def check_spx(code):
     try:
-        from selenium import webdriver
-        from selenium.webdriver.common.by import By
-        from webdriver_manager.chrome import ChromeDriverManager
-        import time
+        import requests
 
-        options = webdriver.ChromeOptions()
-        options.add_argument("--headless=new")
+        url = "https://spx.vn/api/v2/fleet_order/tracking/search"
 
-        driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+        headers = {
+            "Content-Type": "application/json"
+        }
 
-        driver.get("https://spx.vn/")
-        time.sleep(5)
+        payload = {
+            "tracking_number": code
+        }
 
-        input_box = driver.find_element(By.XPATH, "//input")
-        input_box.send_keys(code)
+        res = requests.post(url, json=payload, headers=headers, timeout=10)
 
-        time.sleep(5)
+        data = res.json()
 
-        status = driver.page_source
+        # debug
+        print(data)
 
-        driver.quit()
-
-        if "Đang giao" in status:
-            return "Đang giao"
-        elif "Đã giao" in status:
-            return "Đã giao"
+        if "data" in data and data["data"]:
+            status = data["data"][0]["status"]
+            return status
         else:
-            return "Đang xử lý"
+            return "Không tìm thấy"
 
-    except:
-        return "Lỗi SPX"
+    except Exception as e:
+        print(e)
+        return "SPX lỗi"
 
 # ================= MAIN =================
 def run():
