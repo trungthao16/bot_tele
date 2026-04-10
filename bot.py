@@ -1,7 +1,7 @@
 import requests
 import json
 import time
-import datetime  # Thêm thư viện này để xử lý ngày giờ
+import datetime
 import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -12,7 +12,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 TOKEN = "8597164941:AAFooj7wISO14SoP7wTROfAt8kMhcICa6ns"
 CHAT_ID = "5444530262"
 DATA_FILE = "data.json"
-SLEEP_TIME = 7200  # Quét 2 tiếng / lần
+SLEEP_TIME = 7200  
 
 def load_data():
     if not os.path.exists(DATA_FILE):
@@ -48,7 +48,7 @@ def check_jnt(code):
     except:
         return "Lỗi API J&T"
 
-# ================= TRA CỨU SPX (LẤY FULL HÀNH TRÌNH) =================
+# ================= TRA CỨU SPX (CHẾ ĐỘ DEBUG) =================
 def check_spx(code):
     code = code.strip().upper() 
     driver = None
@@ -81,7 +81,9 @@ def check_spx(code):
         driver.set_script_timeout(30)
         print(f"--- ĐANG MỞ CHROME KIỂM TRA: {code} ---")
         driver.get("https://spx.vn/")
-        time.sleep(10) 
+        
+        # TĂNG THỜI GIAN ĐỢI LÊN 15 GIÂY ĐỂ ĐẢM BẢO VƯỢT CAPTCHA NGẦM
+        time.sleep(15) 
         
         js_script = f"""
         var callback = arguments[0];
@@ -95,10 +97,10 @@ def check_spx(code):
         if "error" in data:
             return "SPX chặn kết nối (Error Fetch)"
 
+        # NẾU CÓ DỮ LIỆU HỢP LỆ
         if data.get("retcode") == 0 and data.get("data") and data["data"].get("tracking_list"):
             tracking_list = data["data"]["tracking_list"]
             
-            # 1. Xác định trạng thái chính từ dòng mới nhất (để hiển thị tiêu đề)
             latest_msg = tracking_list[0].get("message", "").lower()
             if "giao hàng thành công" in latest_msg or "đã được giao" in latest_msg:
                 main_status = "✅ Đã giao"
@@ -107,7 +109,6 @@ def check_spx(code):
             else:
                 main_status = "🔄 Đang vận chuyển"
 
-            # 2. Vòng lặp lấy TOÀN BỘ hành trình
             journey_lines = []
             for item in tracking_list:
                 msg = item.get("message", "")
@@ -115,22 +116,21 @@ def check_spx(code):
                 time_str = ""
                 if timestamp:
                     try:
-                        # Xử lý thời gian (Shopee thường dùng epoch time)
                         if timestamp > 20000000000:
                             timestamp = timestamp / 1000
                         dt = datetime.datetime.fromtimestamp(timestamp)
-                        time_str = dt.strftime('%d/%m %H:%M') + " - " # Ví dụ: 08/04 22:34 - 
+                        time_str = dt.strftime('%d/%m %H:%M') + " - " 
                     except:
                         pass
                 journey_lines.append(f"• {time_str}{msg}")
             
-            # Gộp tất cả các dòng lại thành 1 đoạn văn bản
             full_journey = "\n".join(journey_lines)
-            
-            # Trả về Tiêu đề + Toàn bộ hành trình
             return f"{main_status}\n{full_journey}"
             
-        return "Chưa có hành trình mới"
+        # NẾU KHÔNG CÓ DỮ LIỆU, TRẢ VỀ LỖI GỐC CỦA SPX ĐỂ BẮT BỆNH
+        raw_response = json.dumps(data, ensure_ascii=False)
+        return f"⚠️ SPX từ chối cung cấp dữ liệu. Phản hồi thực tế: {raw_response}"
+        
     except Exception as e:
         print(f"Lỗi SPX ({code}): {str(e)}")
         return f"SPX đang chặn (Lỗi hệ thống)"
@@ -159,12 +159,9 @@ def run():
                 status = check_spx(code)
 
             if status != info.get("last"):
-                # Cập nhật trạng thái mới
                 data[code]["last"] = status
-                send(f"📦 Đơn hàng: <b>{code}</b>\n➡ Trạng thái: {status}")
+                send(f"📦 Đơn hàng: <b>{code}</b>\n➡ Trạng thái:\n{status}")
                 
-                # CHÚ Ý: Đã sửa lại logic xóa đơn. Vì 'status' giờ là 1 đoạn rất dài, 
-                # nên ta dùng 'in' để kiểm tra xem có chữ "Đã giao" trong đoạn đó không.
                 if "✅ Đã giao" in status:
                     keys_to_delete.append(code)
             
