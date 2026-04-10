@@ -1,13 +1,4 @@
 providers = ["python"]
 
 [phases.setup]
-aptPkgs = [
-    "wget", 
-    "gnupg", 
-    "libnss3", 
-    "libxss1", 
-    "libatk-bridge2.0-0", 
-    "libgtk-3-0", 
-    "libgbm-dev", 
-    "libx11-xcb1"
-]
+nixPkgs = ["chromium", "chromedriver"]
