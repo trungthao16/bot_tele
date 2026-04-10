@@ -48,7 +48,7 @@ def check_jnt(code):
     except:
         return "Lỗi API J&T"
 
-# ================= TRA CỨU SPX (CHẾ ĐỘ DEBUG) =================
+# ================= TRA CỨU SPX (GIẢ LẬP NGƯỜI DÙNG THẬT) =================
 def check_spx(code):
     code = code.strip().upper() 
     driver = None
@@ -62,7 +62,7 @@ def check_spx(code):
         # Đường dẫn Chrome trong Docker
         options.binary_location = "/usr/bin/chromium"
         
-        # Các lệnh tàng hình
+        # Các lệnh tàng hình cơ bản
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
@@ -70,11 +70,15 @@ def check_spx(code):
         
         driver = webdriver.Chrome(service=Service("/usr/bin/chromedriver"), options=options)
         
+        # --- VŨ KHÍ TÀNG HÌNH NÂNG CẤP (GIẢ LẬP PHẦN CỨNG) ---
         driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
             "source": """
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                })
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                Object.defineProperty(navigator, 'languages', {get: () => ['vi-VN', 'vi', 'en-US', 'en']});
+                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+                Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8});
+                Object.defineProperty(navigator, 'deviceMemory', {get: () => 8});
+                window.chrome = { runtime: {} };
             """
         })
         
@@ -82,12 +86,24 @@ def check_spx(code):
         print(f"--- ĐANG MỞ CHROME KIỂM TRA: {code} ---")
         driver.get("https://spx.vn/")
         
-        # TĂNG THỜI GIAN ĐỢI LÊN 15 GIÂY ĐỂ ĐẢM BẢO VƯỢT CAPTCHA NGẦM
-        time.sleep(15) 
+        # --- GIẢ LẬP HÀNH VI NGƯỜI THẬT (SCROLL) ---
+        time.sleep(6) # Đợi trang tải xong giao diện
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);") # Cuộn xuống giữa trang
+        time.sleep(3)
+        driver.execute_script("window.scrollTo(0, 0);") # Cuộn ngược lên
+        time.sleep(4) # Chờ Shopee cấp chứng nhận (Cookie)
         
+        # --- FETCH KÈM CREDENTIALS & HEADERS BẮT BUỘC ---
         js_script = f"""
         var callback = arguments[0];
-        fetch('https://spx.vn/api/v2/fleet_order/tracking/search?sls_tracking_number={code}')
+        fetch('https://spx.vn/api/v2/fleet_order/tracking/search?sls_tracking_number={code}', {{
+            credentials: 'include',
+            headers: {{
+                'Accept': 'application/json, text/plain, */*',
+                'x-shopee-language': 'vi',
+                'x-api-source': 'pc'
+            }}
+        }})
             .then(res => res.json())
             .then(data => callback(data))
             .catch(err => callback({{"error": true}}));
@@ -97,7 +113,7 @@ def check_spx(code):
         if "error" in data:
             return "SPX chặn kết nối (Error Fetch)"
 
-        # NẾU CÓ DỮ LIỆU HỢP LỆ
+        # KIỂM TRA DỮ LIỆU ĐƯỢC TRẢ VỀ
         if data.get("retcode") == 0 and data.get("data") and data["data"].get("tracking_list"):
             tracking_list = data["data"]["tracking_list"]
             
@@ -127,9 +143,8 @@ def check_spx(code):
             full_journey = "\n".join(journey_lines)
             return f"{main_status}\n{full_journey}"
             
-        # NẾU KHÔNG CÓ DỮ LIỆU, TRẢ VỀ LỖI GỐC CỦA SPX ĐỂ BẮT BỆNH
         raw_response = json.dumps(data, ensure_ascii=False)
-        return f"⚠️ SPX từ chối cung cấp dữ liệu. Phản hồi thực tế: {raw_response}"
+        return f"⚠️ SPX từ chối cấp dữ liệu (Bị WAF chặn). Phản hồi: {raw_response}"
         
     except Exception as e:
         print(f"Lỗi SPX ({code}): {str(e)}")
