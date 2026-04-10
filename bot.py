@@ -34,32 +34,31 @@ def check_jnt(code):
 def check_spx(code):
     try:
         import requests
+        from bs4 import BeautifulSoup
 
-        url = "https://spx.vn/api/v2/fleet_order/tracking/search"
+        url = f"https://parcelsapp.com/en/tracking/{code}"
+        res = requests.get(url, timeout=10)
 
-        headers = {
-            "Content-Type": "application/json"
-        }
+        if res.status_code != 200:
+            return "SPX lỗi"
 
-        payload = {
-            "tracking_number": code
-        }
+        soup = BeautifulSoup(res.text, "html.parser")
+        text = soup.get_text().lower()
 
-        res = requests.post(url, json=payload, headers=headers, timeout=10)
+        # debug (in log GitHub)
+        print(text[:500])
 
-        data = res.json()
-
-        # debug
-        print(data)
-
-        if "data" in data and data["data"]:
-            status = data["data"][0]["status"]
-            return status
-        else:
+        if "delivered" in text:
+            return "Đã giao"
+        elif "in transit" in text or "out for delivery" in text:
+            return "Đang giao"
+        elif "not found" in text:
             return "Không tìm thấy"
+        else:
+            return "Đang xử lý"
 
     except Exception as e:
-        print(e)
+        print("SPX ERROR:", e)
         return "SPX lỗi"
 
 # ================= MAIN =================
