@@ -80,7 +80,7 @@ def check_spx(code):
         print(f"--- ĐANG MỞ CHROME KIỂM TRA: {code} ---")
         driver.get("https://spx.vn/")
         
-        # Chờ lâu hơn (10s) để Shopee nạp xong hệ thống chống bot (Cloudflare/Akamai)
+        # Chờ 10s để Shopee nạp xong hệ thống chống bot (Cloudflare/Akamai)
         time.sleep(10) 
         
         js_script = f"""
