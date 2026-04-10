@@ -11,7 +11,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 TOKEN = "8597164941:AAFooj7wISO14SoP7wTROfAt8kMhcICa6ns"
 CHAT_ID = "5444530262"
 DATA_FILE = "data.json"
-SLEEP_TIME = 3600  # Thời gian nghỉ giữa mỗi lần quét (3600 giây = 1 tiếng)
+SLEEP_TIME = 7200  # Quét 2 tiếng / lần (tránh bị khóa IP)
 
 def load_data():
     if not os.path.exists(DATA_FILE):
@@ -47,7 +47,7 @@ def check_jnt(code):
     except:
         return "Lỗi API J&T"
 
-# ================= TRA CỨU SPX (Vượt tường lửa) =================
+# ================= TRA CỨU SPX (ANTI-DETECT BẬC CAO) =================
 def check_spx(code):
     code = code.strip().upper() 
     driver = None
@@ -56,16 +56,33 @@ def check_spx(code):
         options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        options.add_argument("--window-size=1920,1080")
+        
+        # --- CÁC LỆNH TÀNG HÌNH CHỐNG CHẶN BỞI SHOPEE ---
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
         
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-        driver.set_script_timeout(20)
         
-        # Truy cập trang chủ lấy Session
+        # Xóa cờ (flag) "webdriver" để Shopee tưởng đây là người thật
+        driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": """
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                })
+            """
+        })
+        
+        driver.set_script_timeout(30)
+        
+        print(f"--- ĐANG MỞ CHROME KIỂM TRA: {code} ---")
         driver.get("https://spx.vn/")
-        time.sleep(5) 
         
-        # Dùng JS đâm xuyên API
+        # Chờ lâu hơn (10s) để Shopee nạp xong hệ thống chống bot (Cloudflare/Akamai)
+        time.sleep(10) 
+        
         js_script = f"""
         var callback = arguments[0];
         fetch('https://spx.vn/api/v2/fleet_order/tracking/search?sls_tracking_number={code}')
@@ -75,6 +92,9 @@ def check_spx(code):
         """
         data = driver.execute_async_script(js_script)
         
+        if "error" in data:
+            return "SPX chặn kết nối (Error Fetch)"
+
         if data.get("retcode") == 0 and data.get("data") and data["data"].get("tracking_list"):
             latest = data["data"]["tracking_list"][0]
             msg = latest.get("message", "")
@@ -86,7 +106,7 @@ def check_spx(code):
         return "Chưa có hành trình mới"
     except Exception as e:
         print(f"Lỗi SPX ({code}): {e}")
-        return "SPX đang chặn"
+        return f"SPX đang chặn (Lỗi hệ thống)"
     finally:
         if driver:
             driver.quit()
@@ -97,7 +117,7 @@ def run():
     while True:
         data = load_data()
         if not data:
-            print("Không có đơn hàng nào trong danh sách. Chờ 1 tiếng...")
+            print("Không có đơn hàng nào trong danh sách. Chờ 2 tiếng...")
             time.sleep(SLEEP_TIME)
             continue
 
@@ -111,22 +131,21 @@ def run():
             else:
                 status = check_spx(code)
 
-            # Nếu trạng thái thay đổi thì mới báo
             if status != info.get("last"):
+                # Cập nhật trạng thái
                 data[code]["last"] = status
                 send(f"📦 Đơn hàng: <b>{code}</b>\n➡ Trạng thái: {status}")
                 
-                # Nếu đã giao xong thì đánh dấu để xóa
+                # Nếu giao xong thì đánh dấu xóa
                 if status == "✅ Đã giao":
                     keys_to_delete.append(code)
             
-            time.sleep(2) # Nghỉ ngắn giữa các đơn tránh bị quét
+            # Đợi 5s giữa 2 đơn hàng liên tiếp để không bị quét tốc độ cao
+            time.sleep(5) 
 
-        # Xóa các đơn đã giao xong khỏi file json
+        # Xóa đơn đã giao
         for k in keys_to_delete:
-            print(f"Đã giao xong, xóa đơn {k} khỏi danh sách.")
             del data[k]
-        
         save_data(data)
         
         print(f"--- Đã xong lượt. Nghỉ {SLEEP_TIME/60} phút... ---")
